@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Torneo de Voleibol</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .tab-active {
+            border-bottom-color: #3b82f6; /* blue-500 */
+            color: #3b82f6;
+        }
+        .match-connector {
+            position: relative;
+            width: 100%;
+        }
+        .match-connector::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            right: 0;
+            border-top: 2px solid #4b5563; /* gray-600 */
+            width: 50%;
+            height: 50%;
+            transform: translateY(-50%);
+        }
+        .match-connector.top::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            border-right: 2px solid #4b5563;
+            height: 50%;
+        }
+        .match-connector.bottom::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            border-right: 2px solid #4b5563;
+            height: 50%;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white antialiased">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-blue-400">Sistema de Torneo de Voleibol</h1>
+            <p class="text-gray-400 mt-2">Gestiona la tabla de posiciones y las rondas clasificatorias.</p>
+        </header>
+
+        <!-- Pestañas de Navegación -->
+        <div class="border-b border-gray-700 mb-8">
+            <nav class="-mb-px flex space-x-6 justify-center" aria-label="Tabs">
+                <button id="tab-table" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg tab-active">Tabla de Posiciones</button>
+                <button id="tab-brackets" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg text-gray-400 hover:text-blue-400">Rondas Clasificatorias</button>
+            </nav>
+        </div>
+
+        <!-- Contenido: Tabla de Posiciones -->
+        <main id="view-table">
+            <div class="bg-gray-800 rounded-lg shadow-xl p-6">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-semibold text-gray-200">Equipos del Torneo</h2>
+                    <form id="add-team-form" class="flex gap-2">
+                        <textarea id="team-name-input" placeholder="Agrega uno o varios equipos, separados por comas" rows="2" class="bg-gray-700 border border-gray-600 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-auto"></textarea>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Agregar</button>
+                    </form>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-700 text-gray-300 uppercase text-sm">
+                            <tr>
+                                <th class="p-3">Pos</th>
+                                <th class="p-3">Equipo</th>
+                                <th class="p-3 text-center">PJ</th>
+                                <th class="p-3 text-center">PG</th>
+                                <th class="p-3 text-center">PP</th>
+                                <th class="p-3 text-center">Puntos</th>
+                                <th class="p-3 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teams-table-body">
+                            <!-- Filas de equipos generadas por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- Contenido: Rondas Clasificatorias -->
+        <main id="view-brackets" class="hidden">
+             <div class="bg-gray-800 rounded-lg shadow-xl p-6">
+                 <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-2xl font-semibold text-gray-200">Cuadro de Rondas</h2>
+                    <button id="generate-brackets-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Generar Rondas con Top 8</button>
+                </div>
+
+                <div id="brackets-container" class="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-4 items-center">
+                    <!-- Cuartos de Final -->
+                    <div id="quarters-col" class="space-y-6"></div>
+                    <!-- Semifinales -->
+                    <div id="semis-col" class="space-y-20"></div>
+                    <!-- Final -->
+                    <div id="final-col" class="space-y-10"></div>
+                </div>
+                
+                <div id="champion-display" class="hidden text-center mt-12">
+                     <h3 class="text-3xl font-bold text-yellow-400">🏆 ¡CAMPEÓN! 🏆</h3>
+                     <p id="champion-name" class="text-2xl mt-2"></p>
+                </div>
+             </div>
+        </main>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- ESTADO DE LA APLICACIÓN ---
+    let teams = [];
+    let nextTeamId = 1;
+    let playoffs = {
+        quarters: [],
+        semis: [],
+        final: [],
+        champion: null
+    };
+
+    // --- SELECTORES DEL DOM ---
+    const tabTable = document.getElementById('tab-table');
+    const tabBrackets = document.getElementById('tab-brackets');
+    const viewTable = document.getElementById('view-table');
+    const viewBrackets = document.getElementById('view-brackets');
+    const addTeamForm = document.getElementById('add-team-form');
+    const teamNameInput = document.getElementById('team-name-input');
+    const teamsTableBody = document.getElementById('teams-table-body');
+    const generateBracketsBtn = document.getElementById('generate-brackets-btn');
+    const bracketsContainer = document.getElementById('brackets-container');
+    const quartersCol = document.getElementById('quarters-col');
+    const semisCol = document.getElementById('semis-col');
+    const finalCol = document.getElementById('final-col');
+    const championDisplay = document.getElementById('champion-display');
+    const championName = document.getElementById('champion-name');
+
+    // --- LÓGICA DE NAVEGACIÓN ---
+    function switchView(view) {
+        if (view === 'table') {
+            viewTable.classList.remove('hidden');
+            viewBrackets.classList.add('hidden');
+            tabTable.classList.add('tab-active', 'text-blue-400');
+            tabBrackets.classList.remove('tab-active', 'text-blue-400');
+        } else {
+            viewTable.classList.add('hidden');
+            viewBrackets.classList.remove('hidden');
+            tabTable.classList.remove('tab-active', 'text-blue-400');
+            tabBrackets.classList.add('tab-active', 'text-blue-400');
+        }
+    }
+
+    // --- LÓGICA DE LA TABLA DE POSICIONES ---
+    function renderTable() {
+        teams.sort((a, b) => b.pts - a.pts);
+        teamsTableBody.innerHTML = '';
+        if (teams.length === 0) {
+            teamsTableBody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500">Aún no se han agregado equipos.</td></tr>`;
+            return;
+        }
+        teams.forEach((team, index) => {
+            const row = document.createElement('tr');
+            row.className = 'border-b border-gray-700 hover:bg-gray-700/50';
+            row.innerHTML = `
+                <td class="p-3 font-medium">${index + 1}</td>
+                <td class="p-3 font-semibold">${team.name}</td>
+                <td class="p-3 text-center">
+                    <div class="flex justify-center items-center gap-2">
+                        <button class="stat-btn bg-gray-600 rounded-full w-6 h-6" data-id="${team.id}" data-stat="pj" data-op="-">-</button>
+                        <span>${team.pj}</span>
+                        <button class="stat-btn bg-gray-600 rounded-full w-6 h-6" data-id="${team.id}" data-stat="pj" data-op="+">+</button>
+                    </div>
+                </td>
+                <td class="p-3 text-center">
+                    <div class="flex justify-center items-center gap-2">
+                        <button class="stat-btn bg-gray-600 rounded-full w-6 h-6" data-id="${team.id}" data-stat="pg" data-op="-">-</button>
+                        <span class="text-green-400 font-bold">${team.pg}</span>
+                        <button class="stat-btn bg-gray-600 rounded-full w-6 h-6" data-id="${team.id}" data-stat="pg" data-op="+">+</button>
+                    </div>
+                </td>
+                <td class="p-3 text-center">
+                    <div class="flex justify-center items-center gap-2">
+                        <button class="stat-btn bg-gray-600 rounded-full w-6 h-6" data-id="${team.id}" data-stat="pp" data-op="-">-</button>
+                        <span class="text-red-400 font-bold">${team.pp}</span>
+                        <button class="stat-btn bg-gray-600 rounded-full w-6 h-6" data-id="${team.id}" data-stat="pp" data-op="+">+</button>
+                    </div>
+                </td>
+                <td class="p-3 text-center font-bold text-lg text-blue-300">${team.pts}</td>
+                <td class="p-3 text-center">
+                    <button class="delete-btn text-red-500 hover:text-red-400" data-id="${team.id}">Eliminar</button>
+                </td>
+            `;
+            teamsTableBody.appendChild(row);
+        });
+    }
+
+    function addTeam(name) {
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+        teams.push({ id: nextTeamId++, name: trimmedName, pj: 0, pg: 0, pp: 0, pts: 0 });
+    }
+
+    function updateStats(teamId, stat, operation) {
+        const team = teams.find(t => t.id === teamId);
+        if (!team) return;
+
+        const value = operation === '+' ? 1 : -1;
+        if (team[stat] + value >= 0) {
+            team[stat] += value;
+        }
+
+        // Recalcular puntos: 2 por victoria, 1 por derrota
+        team.pts = team.pg * 2 + team.pp * 1;
+        renderTable();
+    }
+    
+    function deleteTeam(teamId) {
+        teams = teams.filter(t => t.id !== teamId);
+        renderTable();
+    }
+
+    // --- LÓGICA DE LAS RONDAS CLASIFICATORIAS ---
+    
+    function generateBrackets() {
+        if (teams.length < 8) {
+            alert("Se necesitan al menos 8 equipos para generar las rondas.");
+            return;
+        }
+        
+        teams.sort((a, b) => b.pts - a.pts);
+        const top8 = teams.slice(0, 8);
+        
+        playoffs = {
+            quarters: [
+                { teams: [top8[0], top8[7]], scores: [0, 0], winner: null },
+                { teams: [top8[3], top8[4]], scores: [0, 0], winner: null },
+                { teams: [top8[1], top8[6]], scores: [0, 0], winner: null },
+                { teams: [top8[2], top8[5]], scores: [0, 0], winner: null }
+            ],
+            semis: [
+                { teams: [null, null], scores: [0, 0], winner: null },
+                { teams: [null, null], scores: [0, 0], winner: null }
+            ],
+            final: [
+                { teams: [null, null], scores: [0, 0], winner: null }
+            ],
+            champion: null
+        };
+        renderBrackets();
+    }
+
+    function renderBrackets() {
+        quartersCol.innerHTML = playoffs.quarters.map((match, i) => createMatchHTML(match, 'quarters', i)).join('');
+        semisCol.innerHTML = playoffs.semis.map((match, i) => createMatchHTML(match, 'semis', i)).join('');
+        finalCol.innerHTML = playoffs.final.map((match, i) => createMatchHTML(match, 'final', i)).join('');
+        
+        if(playoffs.champion) {
+            championName.textContent = playoffs.champion.name;
+            championDisplay.classList.remove('hidden');
+        } else {
+            championDisplay.classList.add('hidden');
+        }
+    }
+
+    function createMatchHTML(match, round, index) {
+        const [team1, team2] = match.teams;
+        const disabled = (!team1 || !team2 || match.winner) ? 'disabled' : '';
+        const winnerBg = 'bg-green-500 text-white';
+        
+        return `
+        <div class="bg-gray-700 rounded-lg p-3">
+            <div class="flex justify-between items-center mb-2 ${match.winner === team1 ? winnerBg : ''} p-2 rounded-md">
+                <span class="font-semibold">${team1?.name || '---'}</span>
+                <input type="number" min="0" value="${match.scores[0]}" ${disabled} data-round="${round}" data-index="${index}" data-team="0" class="score-input bg-gray-800 w-12 text-center rounded">
+            </div>
+            <div class="flex justify-between items-center ${match.winner === team2 ? winnerBg : ''} p-2 rounded-md">
+                <span class="font-semibold">${team2?.name || '---'}</span>
+                <input type="number" min="0" value="${match.scores[1]}" ${disabled} data-round="${round}" data-index="${index}" data-team="1" class="score-input bg-gray-800 w-12 text-center rounded">
+            </div>
+        </div>
+        `;
+    }
+
+    function updateScore(round, index, teamIndex, score) {
+        const match = playoffs[round][index];
+        if(!match) return;
+
+        match.scores[teamIndex] = parseInt(score, 10);
+        
+        const [score1, score2] = match.scores;
+        
+        if (score1 > 0 || score2 > 0) {
+            if (score1 > score2) {
+                match.winner = match.teams[0];
+            } else if (score2 > score1) {
+                match.winner = match.teams[1];
+            } else {
+                match.winner = null; // Empate, sin ganador
+            }
+        } else {
+             match.winner = null;
+        }
+
+        updateNextRound();
+        renderBrackets();
+    }
+    
+    function updateNextRound() {
+        // Semifinales
+        playoffs.semis[0].teams[0] = playoffs.quarters[0].winner;
+        playoffs.semis[0].teams[1] = playoffs.quarters[1].winner;
+        playoffs.semis[1].teams[0] = playoffs.quarters[2].winner;
+        playoffs.semis[1].teams[1] = playoffs.quarters[3].winner;
+
+        // Final
+        playoffs.final[0].teams[0] = playoffs.semis[0].winner;
+        playoffs.final[0].teams[1] = playoffs.semis[1].winner;
+        
+        // Campeón
+        playoffs.champion = playoffs.final[0].winner;
+    }
+
+
+    // --- EVENT LISTENERS ---
+    tabTable.addEventListener('click', () => switchView('table'));
+    tabBrackets.addEventListener('click', () => switchView('brackets'));
+    
+    addTeamForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const namesString = teamNameInput.value;
+        const namesArray = namesString.split(',');
+        
+        namesArray.forEach(name => {
+            addTeam(name);
+        });
+
+        teamNameInput.value = '';
+        renderTable();
+    });
+
+    teamsTableBody.addEventListener('click', (e) => {
+        if (e.target.classList.contains('delete-btn')) {
+            const id = parseInt(e.target.dataset.id, 10);
+            deleteTeam(id);
+        }
+        if (e.target.classList.contains('stat-btn')) {
+            const id = parseInt(e.target.dataset.id, 10);
+            const stat = e.target.dataset.stat;
+            const op = e.target.dataset.op;
+            updateStats(id, stat, op);
+        }
+    });
+
+    generateBracketsBtn.addEventListener('click', generateBrackets);
+
+    bracketsContainer.addEventListener('change', (e) => {
+        if (e.target.classList.contains('score-input')) {
+            const { round, index, team } = e.target.dataset;
+            updateScore(round, parseInt(index), parseInt(team), e.target.value);
+        }
+    });
+
+    // --- INICIALIZACIÓN ---
+    function loadInitialData() {
+        // Iniciar con la lista de equipos vacía
+        teams = [];
+        nextTeamId = 1;
+        renderTable();
+    }
+
+    loadInitialData();
+});
+</script>
+
+</body>
+</html>
+
+
+
