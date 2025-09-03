@@ -224,11 +224,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Recalcular puntos: 2 por victoria, 1 por derrota
         team.pts = team.pg * 2 + team.pp * 1;
         renderTable();
+        saveState();
     }
     
     function deleteTeam(teamId) {
         teams = teams.filter(t => t.id !== teamId);
         renderTable();
+        saveState();
     }
 
     // --- LÓGICA DE LAS RONDAS CLASIFICATORIAS ---
@@ -244,21 +246,22 @@ document.addEventListener('DOMContentLoaded', () => {
         
         playoffs = {
             quarters: [
-                { teams: [top8[0], top8[7]], scores: [0, 0], winner: null },
-                { teams: [top8[3], top8[4]], scores: [0, 0], winner: null },
-                { teams: [top8[1], top8[6]], scores: [0, 0], winner: null },
-                { teams: [top8[2], top8[5]], scores: [0, 0], winner: null }
+                { teams: [top8[0], top8[7]], scores: [0, 0], winner: null, date: '', time: '', place: '' },
+                { teams: [top8[3], top8[4]], scores: [0, 0], winner: null, date: '', time: '', place: '' },
+                { teams: [top8[1], top8[6]], scores: [0, 0], winner: null, date: '', time: '', place: '' },
+                { teams: [top8[2], top8[5]], scores: [0, 0], winner: null, date: '', time: '', place: '' }
             ],
             semis: [
-                { teams: [null, null], scores: [0, 0], winner: null },
-                { teams: [null, null], scores: [0, 0], winner: null }
+                { teams: [null, null], scores: [0, 0], winner: null, date: '', time: '', place: '' },
+                { teams: [null, null], scores: [0, 0], winner: null, date: '', time: '', place: '' }
             ],
             final: [
-                { teams: [null, null], scores: [0, 0], winner: null }
+                { teams: [null, null], scores: [0, 0], winner: null, date: '', time: '', place: '' }
             ],
             champion: null
         };
         renderBrackets();
+        saveState();
     }
 
     function renderBrackets() {
@@ -289,6 +292,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="font-semibold">${team2?.name || '---'}</span>
                 <input type="number" min="0" value="${match.scores[1]}" ${disabled} data-round="${round}" data-index="${index}" data-team="1" class="score-input bg-gray-800 w-12 text-center rounded">
             </div>
+            <div class="mt-3 pt-3 border-t border-gray-600 space-y-2 text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-1/4 text-gray-400">Fecha:</span>
+                    <input type="date" value="${match.date || ''}" data-round="${round}" data-index="${index}" data-field="date" class="match-details-input bg-gray-800 border-gray-600 rounded px-2 py-1 w-3/4">
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-1/4 text-gray-400">Hora:</span>
+                    <input type="time" value="${match.time || ''}" data-round="${round}" data-index="${index}" data-field="time" class="match-details-input bg-gray-800 border-gray-600 rounded px-2 py-1 w-3/4">
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-1/4 text-gray-400">Lugar:</span>
+                    <input type="text" value="${match.place || ''}" placeholder="Cancha 1" data-round="${round}" data-index="${index}" data-field="place" class="match-details-input bg-gray-800 border-gray-600 rounded px-2 py-1 w-3/4">
+                </div>
+            </div>
         </div>
         `;
     }
@@ -315,8 +332,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateNextRound();
         renderBrackets();
+        saveState();
     }
     
+    function updateMatchDetails(round, index, field, value) {
+        const match = playoffs[round]?.[index];
+        if (match) {
+            match[field] = value;
+            saveState();
+        }
+    }
+
     function updateNextRound() {
         // Semifinales
         playoffs.semis[0].teams[0] = playoffs.quarters[0].winner;
@@ -330,6 +356,17 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Campeón
         playoffs.champion = playoffs.final[0].winner;
+    }
+
+
+    // --- LÓGICA DE PERSISTENCIA ---
+    function saveState() {
+        const appState = {
+            teams: teams,
+            playoffs: playoffs,
+            nextTeamId: nextTeamId
+        };
+        localStorage.setItem('volleyTournamentState', JSON.stringify(appState));
     }
 
 
@@ -348,6 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         teamNameInput.value = '';
         renderTable();
+        saveState();
     });
 
     teamsTableBody.addEventListener('click', (e) => {
@@ -370,14 +408,33 @@ document.addEventListener('DOMContentLoaded', () => {
             const { round, index, team } = e.target.dataset;
             updateScore(round, parseInt(index), parseInt(team), e.target.value);
         }
+        if (e.target.classList.contains('match-details-input')) {
+            const { round, index, field } = e.target.dataset;
+            updateMatchDetails(round, parseInt(index), field, e.target.value);
+        }
     });
 
     // --- INICIALIZACIÓN ---
     function loadInitialData() {
-        // Iniciar con la lista de equipos vacía
-        teams = [];
-        nextTeamId = 1;
+        const savedState = localStorage.getItem('volleyTournamentState');
+        if (savedState) {
+            const appState = JSON.parse(savedState);
+            teams = appState.teams || [];
+            playoffs = appState.playoffs || { quarters: [], semis: [], final: [], champion: null };
+            nextTeamId = appState.nextTeamId || 1;
+        } else {
+            // Iniciar con la lista de equipos vacía
+            teams = [];
+            playoffs = {
+                quarters: [],
+                semis: [],
+                final: [],
+                champion: null
+            };
+            nextTeamId = 1;
+        }
         renderTable();
+        renderBrackets();
     }
 
     loadInitialData();
@@ -386,6 +443,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </body>
 </html>
+
+
+
 
 
 
